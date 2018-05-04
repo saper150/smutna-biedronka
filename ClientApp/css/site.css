@@ -3,6 +3,7 @@
 }
 
 /* Highlighting rules for nav menu items */
+
 .main-nav li a.active,
 .main-nav li a.active:hover,
 .main-nav li a.active:focus {
@@ -11,6 +12,7 @@
 }
 
 /* Keep the nav menu independent of scrolling and on top of other items */
+
 .main-nav {
     position: fixed;
     top: 0;
@@ -63,4 +65,12 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+}
+
+.clickable-row {
+    cursor: pointer
+}
+
+.clickable-row:hover {
+    background: aliceblue;
 }

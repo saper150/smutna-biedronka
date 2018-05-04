@@ -15,11 +15,7 @@ class ServeWebsocketMiddleware {
 
         var path = context.Request.Path.ToString().Split("/").Where(x => !string.IsNullOrEmpty(x)).ToArray();
         if (path.Length >= 2 && path[0] == "ws" && context.WebSockets.IsWebSocketRequest) {
-            if (path[1] == "mongoPerformance") {
-                await this._socektService.ServeSocket(await context.WebSockets.AcceptWebSocketAsync(), ListenType.MongoPerformance);
-            } else if (path[1] == "mongoStatus") {
-                await this._socektService.ServeSocket(await context.WebSockets.AcceptWebSocketAsync(), ListenType.MongoStatus);
-            }
+            await this._socektService.ServeSocket(await context.WebSockets.AcceptWebSocketAsync(), path[1]);
         } else {
             await _next.Invoke(context);
         }

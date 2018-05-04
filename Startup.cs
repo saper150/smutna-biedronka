@@ -24,6 +24,8 @@ namespace smutna_biedronka {
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services) {
             services.AddSingleton<Try<IMongoDatabase>, TryMongoService>();
+            services.AddTransient<IEnvironmentService, EnvironmentService>();
+            services.AddTransient<IShell, ShellService>();
             services.AddSingleton<IProcessManager, ProcessManager>();
             services.AddSingleton<NewWebsocekthandler, NewWebsocekthandler>();
 
@@ -38,18 +40,23 @@ namespace smutna_biedronka {
             });
             services.AddSingleton<IMonitorService, MonitorService>();
             services.AddMvc();
-            var provider = services.BuildServiceProvider();
-
-            provider.GetService<IMonitorService>().Run();
-
-            //run constructor
-            provider.GetService<NewWebsocekthandler>();
-
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env) {
+        public void Configure(
+            IApplicationBuilder app,
+            IHostingEnvironment env,
+            IMonitorService monitor,
+            NewWebsocekthandler websocketHandler,
+            IProcessManager processManager,
+            IApplicationLifetime applicationLifetime
+            ) {
 
+            applicationLifetime.ApplicationStopping.Register(() => {
+                System.Console.WriteLine("kill all");
+                processManager.KillAll();
+            });
+            monitor.Run();
             app.UseWebSockets();
 
             app.UseDeveloperExceptionPage();
@@ -75,8 +82,6 @@ namespace smutna_biedronka {
                     name: "spa-fallback",
                     defaults: new { controller = "Home", action = "Index" });
             });
-
-
         }
     }
 }

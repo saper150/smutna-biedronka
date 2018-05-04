@@ -1,45 +1,72 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 class AppConfig {
     public Dictionary<string, string> EnvVariables { get; set; } = new Dictionary<string, string>();
 }
-class RunApp : IDisposable {
+class StartApp : IDisposable {
     public event Action<string, string> LogMessage;
 
-    string _appName;
+    public string AppName { get; private set; }
+    public string WorkingDir { get { return Path.Combine("apps", AppName); } }
     Process process;
     AppConfig _config;
-    string _id;
-    public RunApp(string appName, string id, AppConfig config) {
-        _appName = appName;
+    IShell _shell;
+
+    public StartApp(string appName, IShell shell, AppConfig config, Action<string, string> onMessage) {
+        _shell = shell;
+        AppName = appName;
         _config = config;
-        _id = id;
-        Run();
+        LogMessage += onMessage;
+        if (File.Exists(Path.Combine(WorkingDir, "index.js"))) {
+            System.Console.WriteLine("Running " + appName);
+            DownloadNpm();
+            Run();
+        } else {
+            System.Console.WriteLine("directory not found " + appName);
+        }
     }
     public bool IsRunning() {
         return process.HasExited;
     }
-    int retries = 0;
-    async void ProcessExit(object sender, EventArgs eventArgs) {
-        System.Console.WriteLine("exited");
-        if (retries++ <= 5) {
-            LogMessage("controll", "app exited with code " + process.ExitCode);
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            LogMessage("controll", "retrying to start app for " + retries);
-            Run();
+    void ProcessExit(object sender, EventArgs eventArgs) { }
+
+    public int MemUsage() {
+        if (!process.HasExited) {
+            return (int)(process.WorkingSet64 / (1024 * 1024));
+        } else {
+            return 0;
         }
-        LogMessage("controll", "retry 5 failed giving up");
+    }
+
+    void DownloadNpm() {
+        var process = new BlockingProcess() {
+            StartInfo = new ProcessStartInfo() {
+                FileName = _shell.GetExecuteFileName(),
+                Arguments = _shell.FormatCommand("npm install"),
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            }
+        };
+        process.StartInfo.WorkingDirectory = WorkingDir;
+        var result = process.Run();
+        LogMessage("npm", result.Item2);
     }
 
     void Run() {
+
         process = new Process() {
             EnableRaisingEvents = true,
         };
         process.Exited += ProcessExit;
         process.ErrorDataReceived += (sender, message) => {
+            System.Console.WriteLine("receved data");
+            System.Console.WriteLine(message.Data);
             LogMessage("error", message.Data);
         };
 
@@ -47,26 +74,31 @@ class RunApp : IDisposable {
             LogMessage("message", message.Data);
         };
 
-        var startInfo = new ProcessStartInfo {
-            WorkingDirectory = "apps/" + _appName,
-            FileName = "cmd.exe",
-            Arguments = "/c npm run start",
+        var startInfo = new ProcessStartInfo() {
+            FileName = "node",
+            Arguments = "index.js",
             RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            UseShellExecute = false
         };
+        startInfo.WorkingDirectory = WorkingDir;
         foreach (var item in _config.EnvVariables) {
             startInfo.EnvironmentVariables[item.Key] = item.Value;
         }
         process.StartInfo = startInfo;
         process.Start();
-        while (!process.StandardOutput.EndOfStream) {
-            System.Console.WriteLine(process.StandardOutput.ReadLine());
-        }
+        process.BeginErrorReadLine();
+        process.BeginOutputReadLine();
     }
 
     public void Dispose() {
-        process.Kill();
-        process.Dispose();
+        try {
+            process.Kill();
+            process.WaitForExit();
+        } catch (System.Exception ex) {
+            System.Console.WriteLine(ex.Message);
+        }
+
     }
 }

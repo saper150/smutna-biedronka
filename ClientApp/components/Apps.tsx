@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { RouteComponentProps } from 'react-router';
 import 'isomorphic-fetch';
+import { Link } from 'react-router-dom';
 
 
 export class Subdomains extends React.Component<RouteComponentProps<{}>, { apps: any[], newApp: any }> {
@@ -77,6 +78,10 @@ export class Subdomains extends React.Component<RouteComponentProps<{}>, { apps:
         );
     }
 
+    navigate = (name: string) => {
+        this.props.history.push(`/appDetails/${name}`)
+    }
+
     private list() {
         return (
             <table className="table">
@@ -89,7 +94,7 @@ export class Subdomains extends React.Component<RouteComponentProps<{}>, { apps:
                 </thead>
                 <tbody>
                     {this.state.apps.map(app =>
-                        <tr key={app._id}>
+                        <tr className="clickable-row" key={app._id} onClick={this.navigate.bind(null, app.name)}>
                             <td>{app.name}</td>
                             <td>{app.port}</td>
                             <td>{app.apiKey}</td>

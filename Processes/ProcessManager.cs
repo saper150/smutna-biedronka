@@ -1,45 +1,91 @@
-
-
-
-
-
-
-
-
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using Monad;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using LanguageExt;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 
 
 public interface IProcessManager {
-    void AddApp(AppInfo info);
+    void UpdateApp(AppInfo info);
+    IEnumerable<AppUsage> MemUsage();
+    void KillAll();
+}
 
+class LogModel {
+    [BsonId]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string _id { get; set; }
+    public DateTime Time { get; set; } = DateTime.Now;
+    public string Type { get; set; }
+    public string Message { get; set; }
+}
+
+public struct AppUsage {
+    public int MemUsage { get; set; }
+    public string AppName { get; set; }
 }
 
 class ProcessManager : IProcessManager {
-    List<RunApp> Apps = new List<RunApp>();
-
-    public ProcessManager(Try<IMongoDatabase> tryDb) {
-        System.Console.WriteLine("process manager");
-        var tryResult = tryDb.Try(db => {
+    ConcurrentDictionary<string, StartApp> Apps = new ConcurrentDictionary<string, StartApp>();
+    Try<IMongoDatabase> _db;
+    IShell _shell;
+    public ProcessManager(Try<IMongoDatabase> tryDb, IShell shell, IEnvironmentService envService) {
+        _shell = shell;
+        _db = tryDb;
+        tryDb.Try(db => {
             return db.GetCollection<AppInfo>("apps").AsQueryable().ToList();
-        }).Memo()();
-
-        if (tryResult.IsRight) {
-            Apps.AddRange(tryResult.Right.Select(x => new RunApp(x.Name, x._id, new AppConfig())));
+        }).Right(apps => {
+            foreach (var item in apps) {
+                UpdateApp(item);
+            }
+            return Unit.Default;
+        }).Left(x => Unit.Default);
+    }
+    public void UpdateApp(AppInfo info) {
+        lock (this) {
+            StartApp removed = null;
+            if (Apps.TryRemove(info.Name, out removed)) {
+                removed.Dispose();
+            }
+            var app = new StartApp(info.Name, _shell, new AppConfig(), HandleLogMessage(info.Name));
+            Apps.TryAdd(info.Name, app);
         }
-        foreach (var item in Apps) {
-            item.LogMessage += HandleLogMessage;
+    }
+
+    public void KillAll() {
+        lock (this) {
+            foreach (var item in Apps) {
+                item.Value.Dispose();
+            }
+            this.Apps.Clear();
         }
     }
 
-    public void AddApp(AppInfo info) {
-        throw new System.NotImplementedException();
+    IEnumerable<AppUsage> IProcessManager.MemUsage() {
+        return Apps.Select(app => new AppUsage() {
+            AppName = app.Value.AppName,
+            MemUsage = app.Value.MemUsage()
+        });
     }
 
-    void HandleLogMessage(string type, string message) {
-        System.Console.WriteLine(type + " " + "message");
+    Action<string, string> HandleLogMessage(string appName) {
+        return (type, message) => {
+            System.Console.WriteLine(message);
+            _db.Try(db => {
+                return db.GetCollection<LogModel>(appName).InsertOneAsync(new LogModel() {
+                    Type = type,
+                    Message = message
+                });
+            }).Right(x => Unit.Default)
+            .Left(x => Unit.Default);
+        };
     }
+
 
 }

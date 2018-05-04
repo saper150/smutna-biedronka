@@ -1,7 +1,9 @@
 using System;
-using Monad;
 using MongoDB.Driver;
 using Microsoft.Extensions.Configuration;
+using LanguageExt;
+using LanguageExt.DataTypes.Serialisation;
+
 public interface Try<T> {
     Either<Exception, U> Try<U>(Func<T, U> action);
     event Action<bool> databaseStatusChange;
@@ -19,22 +21,22 @@ class TryMongoService : Try<IMongoDatabase> {
     }
 
     public Either<Exception, T> Try<T>(Func<IMongoDatabase, T> action) {
-        return () => {
-            try {
-                var result = action(this.db);
-                if (!IsOnline) {
-                    System.Console.WriteLine("status online");
-                    IsOnline = true;
-                    databaseStatusChange(true);
-                }
-                return result;
-            } catch (System.Exception ex) {
-                if (IsOnline) {
-                    IsOnline = false;
-                    databaseStatusChange(false);
-                }
-                return ex;
+        try {
+            var result = action(this.db);
+            if (!IsOnline) {
+                IsOnline = true;
+                databaseStatusChange(true);
             }
-        };
+            if (result == null) {
+                return new Exception("Element not found");
+            }
+            return result;
+        } catch (System.Exception ex) {
+            if (IsOnline) {
+                IsOnline = false;
+                databaseStatusChange(false);
+            }
+            return ex;
+        }
     }
 }

@@ -10,39 +10,40 @@ using System.Threading;
 using System.Threading.Tasks;
 using MongoDB.Driver;
 using Newtonsoft.Json;
-using Monad;
 
 
 
-enum ListenType {
+public enum ListenType {
     MongoPerformance,
     MongoStatus
 }
 
-interface ISocketServicec {
-    event Action<WebSocket, ListenType> newWebsocket;
-    void Broadcast(byte[] message, ListenType to);
-    void Broadcast(object message, ListenType to);
-    Task ServeSocket(WebSocket socket, ListenType type);
+
+public interface ISocketServicec {
+    event Action<WebSocket, string> newWebsocket;
+    void Broadcast(byte[] message, string chanel);
+    void Broadcast(object message, string chanel);
+    Task ServeSocket(WebSocket socket, string chanel);
 }
 
 class SocketService : ISocketServicec {
 
     struct SocketMessage {
         public byte[] Message;
-        public ListenType To;
+        public string Chanel;
     }
 
-    public event Action<WebSocket, ListenType> newWebsocket;
+    public event Action<WebSocket, string> newWebsocket;
 
-    ConcurrentDictionary<WebSocket, ListenType> Sockets { get; set; } = new ConcurrentDictionary<WebSocket, ListenType>();
+    ConcurrentDictionary<WebSocket, string> Sockets { get; set; } = new ConcurrentDictionary<WebSocket, string>();
     BlockingCollection<SocketMessage> MessagesToSend { get; set; } = new BlockingCollection<SocketMessage>(new ConcurrentQueue<SocketMessage>(), 100);
+
     public SocketService() {
         Task.Run(() => {
             while (true) {
                 var message = MessagesToSend.Take();
                 foreach (var item in Sockets) {
-                    if (item.Value == message.To) {
+                    if (item.Value == message.Chanel) {
                         item.Key.SendMessage(message.Message);
                     }
                 }
@@ -50,21 +51,25 @@ class SocketService : ISocketServicec {
         });
     }
 
-    public void Broadcast(byte[] message, ListenType to) {
-        MessagesToSend.Add(new SocketMessage { Message = message, To = to });
+    public void Broadcast(byte[] message, string chanel) {
+        MessagesToSend.Add(new SocketMessage { Message = message, Chanel = chanel });
     }
 
-    public void Broadcast(object message, ListenType to) {
-        MessagesToSend.Add(new SocketMessage { Message = message.ToJsonBytes(), To = to });
+    public void Broadcast(object message, string chanel) {
+        MessagesToSend.Add(new SocketMessage { Message = message.ToJsonBytes(), Chanel = chanel });
     }
 
-    async public Task ServeSocket(WebSocket socket, ListenType type) {
-        newWebsocket(socket, type);
-        Sockets.TryAdd(socket, type);
+    async public Task ServeSocket(WebSocket socket, string chanel) {
+        newWebsocket(socket, chanel);
+        Sockets.TryAdd(socket, chanel);
         var buffer = new byte[1024];
         while (!(await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None)).CloseStatus.HasValue) ;
-        ListenType removed;
+        string removed;
         Sockets.Remove(socket, out removed);
         await socket.CloseAsync(WebSocketCloseStatus.Empty, "", CancellationToken.None);
+    }
+
+    public void SendToApp(object message, string appName) {
+        throw new NotImplementedException();
     }
 }

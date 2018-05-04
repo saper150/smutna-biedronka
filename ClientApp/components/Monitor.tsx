@@ -1,8 +1,13 @@
 import * as React from 'react';
 import { RouteComponentProps } from 'react-router';
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+
+
+import { List } from "immutable"
+
 import { format } from "date-fns"
+import { ChartData, Chart } from './Chart';
+
 
 interface PerformanceModel {
     _id: string
@@ -14,33 +19,24 @@ interface PerformanceModel {
     MemUsage: number
 }
 
-type ChartData = { name: string, [key: string]: string, }
-
-export class DBPerf extends React.Component<RouteComponentProps<{}>, { [key: string]: any[] }> {
-    socket = new WebSocket('ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/ws/mongoPerformance')
+export class DBPerf extends React.Component<RouteComponentProps<{}>, { [key: string]: List<ChartData> }> {
+    socket = new WebSocket('ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/ws/_mongoPerformance')
     constructor() {
         super();
         const metrics = ['Inserted', 'Returned', 'Updated', 'Deleted', 'MemUsage']
-        this.state = metrics.reduce((acc, c) => ({ ...acc, [c]: [] }), {})
-        console.log(this.state)
+        this.state = metrics.reduce((acc, c) => ({ ...acc, [c]: List() }), {})
+
         this.socket.onmessage = (message) => {
             const response: PerformanceModel | PerformanceModel[] = JSON.parse(message.data)
             if (Array.isArray(response)) {
-
                 this.setState(metrics.reduce((acc, c) => ({
                     ...acc,
-                    [c]: response.map(x => ({ name: format(x.Time, 'HH:mm'), [c]: x[c] }))
+                    [c]: this.state[c].concat(response.map(x => ({ name: format(x.Time, 'HH:mm'), [c]: x[c] })))
                 }), {}))
-
-                console.log(metrics.reduce((acc, c) => ({
-                    ...acc,
-                    [c]: response.map(x => ({ name: format(x.Time, 'HH:mm'), [c]: x[c] }))
-                }), {}))
-
             } else {
                 this.setState(metrics.reduce((acc, c) => ({
                     ...acc,
-                    [c]: this.state[c].concat([response[c]])
+                    [c]: this.state[c].push({ name: format(new Date().toUTCString(), 'HH:mm'), [c]: response[c] })
                 }), {}))
             }
         }
@@ -64,26 +60,10 @@ export class DBPerf extends React.Component<RouteComponentProps<{}>, { [key: str
     }
 }
 
-class Chart extends React.Component<{ dataKey: string, data: any[] }> {
-    public render() {
-        return <div>
-            <p>{this.props.dataKey}</p>
-            <LineChart width={600} height={300} data={this.props.data}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <XAxis dataKey="name" />
-                <YAxis />
-                <CartesianGrid strokeDasharray="3 3" />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey={this.props.dataKey} stroke="#8884d8" />
-            </LineChart>
-        </div>;
-    }
-}
 
 
 class MongoOnlineStatus extends React.Component<{}, { isOnline: boolean }>{
-    socket = new WebSocket('ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/ws/mongoStatus')
+    socket = new WebSocket('ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/ws/_mongoStatus')
     constructor() {
         super();
         this.state = { isOnline: true }

@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "date-fns": "^1.29.0",
+    "immutable": "^3.8.2",
     "recharts": "^1.0.0-beta.10"
   }
 }
