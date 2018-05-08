@@ -13,9 +13,10 @@ class ShellService : IShell {
 
     string cmdString;
     string cmdArgument;
+    OSPlatform OS;
     public ShellService(IEnvironmentService envService) {
-        var os = envService.OSType();
-        if (os == OSPlatform.Windows) {
+        OS = envService.OSType();
+        if (OS == OSPlatform.Windows) {
             cmdString = "cmd.exe";
             cmdArgument = "/c";
         } else {
@@ -25,7 +26,12 @@ class ShellService : IShell {
     }
 
     public string FormatCommand(string command) {
-        return $"{cmdArgument} {command}";
+        if (OS == OSPlatform.Linux) {
+            return $"{cmdArgument} \"{command}\"";
+        } else {
+            System.Console.WriteLine(command.Replace("\"","\\\""));
+            return $"{cmdArgument} {command.Replace("\"","\\\"")}";
+        }
     }
 
     public string GetExecuteFileName() {

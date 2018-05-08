@@ -12,7 +12,8 @@ using MongoDB.Driver;
 
 
 public interface IProcessManager {
-    void UpdateApp(AppInfo info);
+    void Restart(AppInfo info);
+    void Remove(AppInfo info);
     IEnumerable<AppUsage> MemUsage();
     void KillAll();
 }
@@ -42,18 +43,22 @@ class ProcessManager : IProcessManager {
             return db.GetCollection<AppInfo>("apps").AsQueryable().ToList();
         }).Right(apps => {
             foreach (var item in apps) {
-                UpdateApp(item);
+                Restart(item);
             }
             return Unit.Default;
         }).Left(x => Unit.Default);
     }
-    public void UpdateApp(AppInfo info) {
+    public void Restart(AppInfo info) {
         lock (this) {
             StartApp removed = null;
             if (Apps.TryRemove(info.Name, out removed)) {
                 removed.Dispose();
             }
-            var app = new StartApp(info.Name, _shell, new AppConfig(), HandleLogMessage(info.Name));
+            var app = new StartApp(info.Name, _shell, new AppConfig() {
+                EnvVariables = new Dictionary<string, string>() {
+                    { "PORT", info.Port.ToString() }
+                }
+            }, HandleLogMessage(info.Name));
             Apps.TryAdd(info.Name, app);
         }
     }
@@ -87,5 +92,10 @@ class ProcessManager : IProcessManager {
         };
     }
 
-
+    public void Remove(AppInfo info) {
+        StartApp app;
+        if (Apps.TryRemove(info.Name, out app)) {
+            app.Dispose();
+        }
+    }
 }

@@ -3,31 +3,30 @@ import { RouteComponentProps } from 'react-router';
 import 'isomorphic-fetch';
 import { Link } from 'react-router-dom';
 
+import * as TagsInput from 'react-tagsinput'
+import 'react-tagsinput/react-tagsinput.css'
+import { AppForm, AppCreateInfo } from '../App/AppForm';
 
-export class Subdomains extends React.Component<RouteComponentProps<{}>, { apps: any[], newApp: any }> {
-    constructor() {
-        super();
-        this.state = { apps: [], newApp: { name: '', port: '' } };
+export class Subdomains extends React.Component<RouteComponentProps<{}>, { apps: any[], newApp: AppCreateInfo }> {
+    formRef: React.RefObject<AppForm> = React.createRef()
+    constructor(props) {
+        super(props);
+        this.state = {
+            apps: [],
+            newApp: {
+                name: '',
+                port: '',
+                serverNames: []
+            }
+        };
         fetch('api/Apps/Get')
             .then(response => response.json())
             .then(apps => {
                 this.setState({ apps });
             });
-        this.handleInputChange = this.handleInputChange.bind(this);
     }
 
-    handleInputChange(event) {
-        const target = event.target;
-        const value = target.type === 'checkbox' ? target.checked : target.value;
-        const name = target.name;
-
-        this.setState({
-            newApp: { ...this.state.newApp, [name]: value }
-        });
-    }
-
-    addSubdomain(event: Event) {
-        event.preventDefault()
+    createApp = () => {
         fetch("api/Apps/Create", {
             method: 'POST',
             headers: {
@@ -40,46 +39,33 @@ export class Subdomains extends React.Component<RouteComponentProps<{}>, { apps:
             })
     }
 
+    appChange = newApp => {
+        this.setState({ newApp: { ...newApp } })
+    }
+
     render() {
         return (
             <div>
-                {this.addForm()}
+                <AppForm buttonText={'add'} app={this.state.newApp} onChange={this.appChange} onSubmit={this.createApp} />
                 {this.list()}
             </div>
         )
     }
-    private addForm() {
-        return (
-            <form onSubmit={this.addSubdomain.bind(this)}>
-                <div className="form-group">
-                    <label >
-                        Name
-                        <input
-                            minLength={2}
-                            required
-                            className="form-control"
-                            type="text"
-                            name="name"
-                            value={this.state.newApp.name}
-                            onChange={this.handleInputChange} />
-                    </label>
-                </div>
-                <div>
-                    <label>
-                        Port
-                        <input min={0} type="number" required className="form-control" name="port" value={this.state.newApp.port}
-                            onChange={this.handleInputChange} />
-                    </label>
-                </div>
-                <div className="form-group">
-                    <button className="btn btn-primary" type="submit"> Add new</button>
-                </div>
-            </form>
-        );
+
+    navigate = (apiKey: string) => {
+        this.props.history.push(`/appDetails/${apiKey}`)
     }
 
-    navigate = (name: string) => {
-        this.props.history.push(`/appDetails/${name}`)
+    delete = (apiKey: string) => {
+        fetch(`api/Apps/Delete/${apiKey}`, {
+            method: 'delete'
+        })
+            .then(x => x.json())
+            .then(x => {
+                this.setState({
+                    apps: this.state.apps.filter(x => x.apiKey !== apiKey)
+                })
+            })
     }
 
     private list() {
@@ -90,14 +76,18 @@ export class Subdomains extends React.Component<RouteComponentProps<{}>, { apps:
                         <th>Name</th>
                         <th>Port</th>
                         <th>Key</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     {this.state.apps.map(app =>
-                        <tr className="clickable-row" key={app._id} onClick={this.navigate.bind(null, app.name)}>
-                            <td>{app.name}</td>
+                        <tr key={app._id}>
+                            <td className="clickable-row" onClick={this.navigate.bind(null, app.apiKey)}>{app.name}</td>
                             <td>{app.port}</td>
                             <td>{app.apiKey}</td>
+                            <td>
+                                <a onClick={this.delete.bind(this, app.apiKey)}>Delete</a>
+                            </td>
                         </tr>
                     )}
                 </tbody>

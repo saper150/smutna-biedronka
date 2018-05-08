@@ -26,6 +26,7 @@ namespace smutna_biedronka {
             services.AddSingleton<Try<IMongoDatabase>, TryMongoService>();
             services.AddTransient<IEnvironmentService, EnvironmentService>();
             services.AddTransient<IShell, ShellService>();
+            services.AddTransient<INginxService, NginxService>();
             services.AddSingleton<IProcessManager, ProcessManager>();
             services.AddSingleton<NewWebsocekthandler, NewWebsocekthandler>();
 
@@ -59,12 +60,12 @@ namespace smutna_biedronka {
             monitor.Run();
             app.UseWebSockets();
 
-            app.UseDeveloperExceptionPage();
-            app.UseWebpackDevMiddleware(new WebpackDevMiddlewareOptions {
-                HotModuleReplacement = true,
-                ReactHotModuleReplacement = true
-            });
             if (env.IsDevelopment()) {
+                app.UseDeveloperExceptionPage();
+                app.UseWebpackDevMiddleware(new WebpackDevMiddlewareOptions {
+                    HotModuleReplacement = true,
+                    ReactHotModuleReplacement = true
+                });
             } else {
                 app.UseExceptionHandler("/Home/Error");
             }

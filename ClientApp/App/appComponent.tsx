@@ -4,6 +4,7 @@ import { Component } from "react";
 import { List } from "immutable";
 import { format } from "date-fns";
 import { ChartData, Chart } from "../components/Chart";
+import { AppForm } from "./appForm";
 
 
 interface Log {
@@ -13,22 +14,47 @@ interface Log {
     message: string
 }
 
+interface AppInfo {
+    name: string
+    apiKey: string
+    serverNames: string[]
+    port: number
+}
 
-export class AppInfo extends React.Component<RouteComponentProps<{ name: string }>, { logs: List<Log>, memUsage: List<ChartData> }> {
 
-    socket = new WebSocket('ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/ws/' + this.props.match.params.name)
+export class AppDetails extends React.Component<RouteComponentProps<{ apiKey: string }>,
+    { logs: List<Log>, memUsage: List<ChartData>, app: AppInfo }> {
+
+    socket: WebSocket
 
     constructor(props) {
         super(props)
         this.state = {
             logs: List(),
-            memUsage: List()
+            memUsage: List(),
+            app: { name: '', apiKey: '', serverNames: [], port: 0 }
         };
-        fetch(`api/Apps/Logs/${this.props.match.params.name}`)
-            .then(response => response.json() as Promise<Log[]>)
+
+        fetch(`api/Apps/Get/${this.props.match.params.apiKey}`)
+            .then(x => x.json())
+            .then(app => {
+                console.log(app)
+                this.setState({ app: app })
+                this.setUpSocket(app);
+                return fetch(`api/Apps/Logs/${app.name}`)
+            }).then(response => response.json() as Promise<Log[]>)
             .then(logs => {
                 this.setState({ logs: List(logs) });
             });
+
+
+    }
+
+    setUpSocket(app: AppInfo) {
+        this.socket = new WebSocket('ws://'
+            + location.hostname + (location.port ? ':' + location.port : '')
+            + '/ws/' + app.name
+        )
         this.socket.onclose = console.log
         this.socket.onopen = console.log
         this.socket.onerror = console.log
@@ -52,9 +78,26 @@ export class AppInfo extends React.Component<RouteComponentProps<{ name: string 
         }
     }
 
+    onFormChange = app => {
+        this.setState({
+            app: { ...this.state.app, ...app }
+        })
+    }
+
+    onSubmit = () => {
+        fetch(`api/Apps/Update/${this.state.app.apiKey}`, {
+            method: 'put',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(this.state.app)
+        }).then(x => x.json())
+    }
+
     render() {
         return (
             <div>
+                <AppForm buttonText={"Update"} app={this.state.app as any} onChange={this.onFormChange} onSubmit={this.onSubmit} nameDisabled={true} />
                 <Chart dataKey="mem usage" data={this.state.memUsage} />
                 <Logs logs={this.state.logs} />
             </div>

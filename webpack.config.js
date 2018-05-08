@@ -8,8 +8,13 @@ module.exports = (env) => {
     const isDevBuild = !(env && env.prod);
     return [{
         stats: { modules: false },
-        entry: { 'main': './ClientApp/boot.tsx' },
-        resolve: { extensions: ['.js', '.jsx', '.ts', '.tsx'] },
+        entry: { 'main': path.join(__dirname, './ClientApp/boot.tsx') },
+        resolve: {
+            alias: {
+                'react': path.join(__dirname, 'node_modules', 'react')
+            },
+            extensions: ['.js', '.jsx', '.ts', '.tsx']
+        },
         output: {
             path: path.join(__dirname, bundleOutputDir),
             filename: '[name].js',
@@ -35,9 +40,9 @@ module.exports = (env) => {
                 moduleFilenameTemplate: path.relative(bundleOutputDir, '[resourcePath]') // Point sourcemap entries to the original file locations on disk
             })
         ] : [
-            // Plugins that apply in production builds only
-            new webpack.optimize.UglifyJsPlugin(),
-            new ExtractTextPlugin('site.css')
-        ])
+                // Plugins that apply in production builds only
+                new webpack.optimize.UglifyJsPlugin(),
+                new ExtractTextPlugin('site.css')
+            ])
     }];
 };

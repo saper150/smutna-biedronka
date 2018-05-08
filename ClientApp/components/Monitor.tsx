@@ -21,8 +21,8 @@ interface PerformanceModel {
 
 export class DBPerf extends React.Component<RouteComponentProps<{}>, { [key: string]: List<ChartData> }> {
     socket = new WebSocket('ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/ws/_mongoPerformance')
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
         const metrics = ['Inserted', 'Returned', 'Updated', 'Deleted', 'MemUsage']
         this.state = metrics.reduce((acc, c) => ({ ...acc, [c]: List() }), {})
 
@@ -64,8 +64,8 @@ export class DBPerf extends React.Component<RouteComponentProps<{}>, { [key: str
 
 class MongoOnlineStatus extends React.Component<{}, { isOnline: boolean }>{
     socket = new WebSocket('ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/ws/_mongoStatus')
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
         this.state = { isOnline: true }
         this.socket.onmessage = message => {
             this.setState({

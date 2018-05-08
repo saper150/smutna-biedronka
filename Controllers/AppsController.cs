@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -19,8 +20,13 @@ public class AppInfo {
     [BsonId]
     [BsonRepresentation(BsonType.ObjectId)]
     public string _id { get; set; }
+    [JsonProperty("name")]
     public string Name { get; set; }
+    [JsonProperty("serverNames")]
+    public IEnumerable<string> ServerNames { get; set; }
+    [JsonProperty("port")]
     public int Port { get; set; }
+    [JsonProperty("apiKey")]
     public string ApiKey { get; set; }
 }
 
@@ -30,19 +36,29 @@ namespace smutna_biedronka.Controllers {
     public class AppsController : Controller {
 
         public class AppCreateInfo {
-            public string name { get; set; }
-            public int port { get; set; }
+            public string Name { get; set; }
+            public int Port { get; set; }
+            public IEnumerable<string> ServerNames { get; set; }
+        }
+
+        public class AppUpdateInfo {
+            public int Port { get; set; }
+            public IEnumerable<string> ServerNames { get; set; }
         }
         Try<IMongoDatabase> _db;
         IHostingEnvironment _environment;
         IProcessManager _processManager;
+
         IHostingEnvironment _env;
+        INginxService _nginxService;
         public AppsController(
             Try<IMongoDatabase> db,
             IProcessManager processManager,
             IHostingEnvironment environment,
-            IHostingEnvironment env
+            IHostingEnvironment env,
+            INginxService nginxService
         ) {
+            _nginxService = nginxService;
             _env = env;
             _processManager = processManager;
             _environment = environment;
@@ -53,11 +69,13 @@ namespace smutna_biedronka.Controllers {
         public IActionResult Create([FromBody] AppCreateInfo info) {
             return _db.Try(_db => {
                 var doc = new AppInfo {
-                    Name = info.name,
-                    Port = info.port,
+                    Name = info.Name,
+                    Port = info.Port,
+                    ServerNames = info.ServerNames,
                     ApiKey = Crypto.SecureRandomString()
                 };
                 _db.GetCollection<AppInfo>("apps").InsertOne(doc);
+                _nginxService.RefreshConfig();
                 return doc;
             }).Right(x => Ok(x) as IActionResult)
                 .Left(x => BadRequest(x) as IActionResult);
@@ -71,12 +89,55 @@ namespace smutna_biedronka.Controllers {
             .Left(err => BadRequest(err) as IActionResult);
         }
 
+        [HttpGet("[action]/{apiKey}")]
+        public IActionResult Get(string apiKey) {
+            return _db.Try(_db => {
+                return _db.GetCollection<AppInfo>("apps").AsQueryable()
+                    .FirstOrDefault(x => x.ApiKey == apiKey);
+            }).Right(x => Ok(x) as IActionResult)
+            .Left(err => BadRequest(err) as IActionResult);
+        }
+
+
         [HttpGet("[action]/{appName}")]
         public IActionResult Logs(string appName) {
             return _db.Try(_db => {
                 return _db.GetCollection<LogModel>(appName).AsQueryable();
             }).Right(x => Ok(x) as IActionResult)
             .Left(err => BadRequest(err) as IActionResult);
+        }
+        [HttpDelete("[action]/{apiKey}")]
+        public IActionResult Delete(string apiKey) {
+            return _db.Try(_db => {
+                return _db.GetCollection<AppInfo>("apps").AsQueryable()
+                    .FirstOrDefault(x => x.ApiKey == apiKey);
+            }).Bind(app => {
+                _processManager.Remove(app);
+                return _db.Try(_db => {
+                    _db.GetCollection<AppInfo>("apps").DeleteOne(x => x._id == app._id);
+                    return app;
+                });
+            }).Right(x => Ok(x) as IActionResult)
+                .Left(x => BadRequest(x.Message) as IActionResult);
+        }
+
+        [HttpPut("[action]/{apiKey}")]
+        public IActionResult Update(string apiKey, [FromBody]AppUpdateInfo info) {
+            return _db.Try(_db => {
+                _db.GetCollection<AppInfo>("apps")
+                    .UpdateOne(x => x.ApiKey == apiKey,
+                     Builders<AppInfo>.Update.Combine(
+                        Builders<AppInfo>.Update.Set(x => x.Port, info.Port),
+                        Builders<AppInfo>.Update.Set(x => x.ServerNames, info.ServerNames)
+                    ));
+                return _db.GetCollection<AppInfo>("apps").AsQueryable().FirstOrDefault(x => x.ApiKey == apiKey);
+            }).Bind<AppInfo>(app => {
+                _nginxService.RefreshConfig();
+                _processManager.Restart(app);
+                return app;
+            })
+            .Right(x => Ok(x) as IActionResult)
+            .Left(x => BadRequest(x.Message) as IActionResult);
         }
 
         [HttpPost("[action]")]
@@ -88,21 +149,21 @@ namespace smutna_biedronka.Controllers {
                 System.Console.WriteLine(app);
                 return app;
             }).Bind<AppInfo>((app => {
-                var appPath = Path.Combine(_env.WebRootPath, "apps", app.Name);
+                var appPath = Path.Combine(_env.ContentRootPath, "apps", app.Name);
                 if (System.IO.Directory.Exists(appPath)) {
                     try {
                         System.IO.Directory.Delete(appPath, true);
                     } catch (System.Exception) { }
                 }
                 Directory.CreateDirectory("workingDir");
-                var filePath = Path.Combine(_env.WebRootPath, "workingDir", Guid.NewGuid().ToString());
+                var filePath = Path.Combine(_env.ContentRootPath, "workingDir", Guid.NewGuid().ToString());
                 using (var stream = new FileStream(filePath, FileMode.Create)) {
                     file.CopyTo(stream);
                 }
                 try {
                     ZipFile.ExtractToDirectory(filePath, Path.Combine("apps", app.Name));
                     System.IO.File.Delete(filePath);
-                    _processManager.UpdateApp(app);
+                    _processManager.Restart(app);
                     return app;
                 } catch (System.Exception ex) {
                     return ex;
@@ -112,16 +173,18 @@ namespace smutna_biedronka.Controllers {
             .Left(x => BadRequest(x.Message) as IActionResult);
         }
 
-        [HttpPost("[action]")]
+        [HttpPost("[action]/{apiKey}")]
         public IActionResult Restart(string apiKey) {
             return _db.Try(_db => {
                 return _db.GetCollection<AppInfo>("apps").AsQueryable()
                     .FirstOrDefault(x => x.ApiKey == apiKey);
             }).Bind<AppInfo>(app => {
-                _processManager.UpdateApp(app);
+                _processManager.Restart(app);
                 return app;
             }).Right(x => Ok(x) as IActionResult)
                 .Left(x => BadRequest(x.Message) as IActionResult);
         }
+
+
     }
 }

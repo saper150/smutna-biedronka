@@ -35,7 +35,7 @@ class StartApp : IDisposable {
     void ProcessExit(object sender, EventArgs eventArgs) { }
 
     public int MemUsage() {
-        if (!process.HasExited) {
+        if (process != null && !process.HasExited) {
             return (int)(process.WorkingSet64 / (1024 * 1024));
         } else {
             return 0;
@@ -50,10 +50,10 @@ class StartApp : IDisposable {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
-                UseShellExecute = false
+                UseShellExecute = false,
+                WorkingDirectory = WorkingDir
             }
         };
-        process.StartInfo.WorkingDirectory = WorkingDir;
         var result = process.Run();
         LogMessage("npm", result.Item2);
     }
@@ -94,8 +94,10 @@ class StartApp : IDisposable {
 
     public void Dispose() {
         try {
-            process.Kill();
-            process.WaitForExit();
+            if (process != null) {
+                process.Kill();
+                process.WaitForExit();
+            }
         } catch (System.Exception ex) {
             System.Console.WriteLine(ex.Message);
         }
