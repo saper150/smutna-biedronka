@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "mongodb": "^3.0.7",
-    "nginx-conf": "^1.4.0"
+    "nginx-conf": "^1.4.0",
+    "upath": "^1.0.5"
   }
 }

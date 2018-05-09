@@ -4928,6 +4928,11 @@
         }
       }
     },
+    "upath": {
+      "version": "1.0.5",
+      "resolved": "https://registry.npmjs.org/upath/-/upath-1.0.5.tgz",
+      "integrity": "sha512-qbKn90aDQ0YEwvXoLqj0oiuUYroLX2lVHZ+b+xwjozFasAOC4GneDq5+OaIG5Zj+jFmbz/uO+f7a9qxjktJQww=="
+    },
     "urix": {
       "version": "0.1.0",
       "resolved": "https://registry.npmjs.org/urix/-/urix-0.1.0.tgz",
